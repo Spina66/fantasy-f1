@@ -38,7 +38,7 @@ const TEAM_COLORS = {
   NoCal:        { accent: "#1E90FF", bg: "#07111F" },
   SoCal:        { accent: "#FF6B00", bg: "#1F0D00" },
   Cuz:          { accent: "#9B30FF", bg: "#0F071F" },
-  "Free Agent": { accent: "#444",    bg: "#0D0D0D" },
+  "Free Agent": { accent: "#777",    bg: "#0D0D0D" },
 };
 
 const VALID_TEAMS = ["NoCal", "SoCal", "Cuz", "Free Agent"];
@@ -299,9 +299,9 @@ export default function FantasyF1App() {
                 const raceInfo = schedule.find(s => s.round === r);
                 const isDone = raceInfo && new Date(raceInfo.date) < new Date();
                 return (
-                  <th key={r} style={{ minWidth: 66, textAlign: "center", padding: "8px 4px", color: isDone ? "#666" : "#888" }}>
+                  <th key={r} style={{ minWidth: 66, textAlign: "center", padding: "8px 4px", color: isDone ? "#999" : "#888" }}>
                     R{r}
-                    {raceInfo && <div style={{ fontSize: 9, color: "#3A3A4A", fontWeight: 400, marginTop: 2 }}>
+                    {raceInfo && <div style={{ fontSize: 9, color: "#888", fontWeight: 400, marginTop: 2 }}>
                       {raceInfo.raceName?.replace(" Grand Prix","").slice(0,7)}
                     </div>}
                   </th>
@@ -324,7 +324,7 @@ export default function FantasyF1App() {
                   <tr key={code}>
                     <td style={{ position: "sticky", left: 0, background: "#0D0D14", zIndex: 1, padding: "5px 14px", borderBottom: "1px solid #181820" }}>
                       <div style={{ fontWeight: 700, fontSize: 13 }}>{code}</div>
-                      <div style={{ fontSize: 10, color: "#555" }}>{F1_DRIVER_MAP[code]}</div>
+                      <div style={{ fontSize: 10, color: "#AAA" }}>{F1_DRIVER_MAP[code]}</div>
                     </td>
                     {rounds.map(r => {
                       const team = lineup[code]?.[r] || "Free Agent";
@@ -399,7 +399,7 @@ export default function FantasyF1App() {
         @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@700;900&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
         ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:#0A0A0F}::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
-        .tab-btn{background:none;border:none;cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:13px;letter-spacing:2px;text-transform:uppercase;padding:10px 16px;color:#555;transition:all .2s;border-bottom:2px solid transparent;white-space:nowrap}
+        .tab-btn{background:none;border:none;cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:13px;letter-spacing:2px;text-transform:uppercase;padding:10px 16px;color:#AAA;transition:all .2s;border-bottom:2px solid transparent;white-space:nowrap}
         .tab-btn.active{color:#E8003D;border-bottom-color:#E8003D}.tab-btn:hover:not(.active){color:#aaa}
         .card{background:#13131A;border:1px solid #222;border-radius:4px;overflow:hidden;margin-bottom:16px}
         .card-header{padding:13px 20px;border-bottom:1px solid #222;display:flex;align-items:center;justify-content:space-between}
@@ -407,16 +407,16 @@ export default function FantasyF1App() {
         .driver-row:last-child{border-bottom:none}.driver-row:hover{background:#1A1A26}
         .pts-badge{font-family:'Orbitron',sans-serif;font-size:13px;font-weight:700}
         .refresh-btn{background:#E8003D;color:white;border:none;font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:2px;font-size:12px;cursor:pointer;padding:8px 18px;border-radius:3px;text-transform:uppercase}
-        .refresh-btn:hover{background:#ff1a52}.refresh-btn:disabled{background:#444;cursor:default}
+        .refresh-btn:hover{background:#ff1a52}.refresh-btn:disabled{background:#888;cursor:default}
         .action-btn{background:#1E1E2A;color:#aaa;border:1px solid #333;font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:1px;font-size:11px;cursor:pointer;padding:5px 12px;border-radius:2px;text-transform:uppercase;transition:all .2s}
         .action-btn:hover{border-color:#E8003D;color:#E8003D}
         .save-btn{background:#E8003D;color:white;border:none;font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:1px;font-size:13px;cursor:pointer;padding:9px 22px;border-radius:3px;text-transform:uppercase}
         table{width:100%;border-collapse:collapse}
-        th{font-size:11px;letter-spacing:1px;color:#555;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid #1E1E28}
+        th{font-size:11px;letter-spacing:1px;color:#AAA;text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid #1E1E28}
         td{padding:9px 14px;border-bottom:1px solid #181820;font-size:14px}
         tr:last-child td{border-bottom:none}tr:hover td{background:#16161E}
         .dnf-badge{font-size:10px;letter-spacing:1px;background:#3A0A0A;color:#FF4444;padding:1px 6px;border-radius:2px;border:1px solid #FF444433}
-        .fa-badge{font-size:10px;background:#1A1A1A;color:#666;padding:1px 6px;border-radius:2px;letter-spacing:1px}
+        .fa-badge{font-size:10px;background:#1A1A1A;color:#999;padding:1px 6px;border-radius:2px;letter-spacing:1px}
         .ticker{background:#E8003D;padding:5px 0;font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;white-space:nowrap;overflow:hidden}
         .ticker-inner{display:inline-block;animation:ticker 30s linear infinite}
         @keyframes ticker{0%{transform:translateX(100vw)}100%{transform:translateX(-100%)}}
@@ -431,7 +431,7 @@ export default function FantasyF1App() {
         select option{background:#13131A}
         input[type="password"]{background:#0A0A0F;border:1px solid #333;color:#E8E8F0;font-family:'Rajdhani',sans-serif;font-size:14px;padding:8px 12px;border-radius:3px;outline:none;width:100%}
         input[type="password"]:focus{border-color:#E8003D}
-        .form-label{font-size:11px;letter-spacing:2px;color:#666;text-transform:uppercase;display:block;margin-bottom:6px}
+        .form-label{font-size:11px;letter-spacing:2px;color:#999;text-transform:uppercase;display:block;margin-bottom:6px}
         .admin-warning{background:#1A1000;border:1px solid #E8003D33;border-radius:4px;padding:10px 16px;font-size:12px;color:#FF8800;letter-spacing:1px;margin-bottom:16px}
       `}</style>
 
@@ -442,12 +442,12 @@ export default function FantasyF1App() {
             <div style={{ width: 4, height: 36, background: "#E8003D", borderRadius: 2 }} />
             <div>
               <div style={{ fontFamily: "'Orbitron',sans-serif", fontSize: 20, fontWeight: 900, color: "#E8003D", letterSpacing: 3 }}>FANTASY F1</div>
-              <div style={{ fontSize: 11, letterSpacing: 3, color: "#555", marginTop: 1 }}>LEAGUE STANDINGS</div>
+              <div style={{ fontSize: 11, letterSpacing: 3, color: "#AAA", marginTop: 1 }}>LEAGUE STANDINGS</div>
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 11, letterSpacing: 2, color: "#555", textTransform: "uppercase" }}>Season</span>
+              <span style={{ fontSize: 11, letterSpacing: 2, color: "#AAA", textTransform: "uppercase" }}>Season</span>
               <select className="season-select" value={season} onChange={e => handleSeasonChange(e.target.value)}>
                 <option value={2026}>2026 — Current</option>
                 <option value={2025}>2025 — Archive</option>
@@ -486,8 +486,8 @@ export default function FantasyF1App() {
           <span style={{ fontFamily: "'Orbitron',sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: 2, color: season === 2025 ? "#FFD700" : "#E8003D" }}>
             {season} SEASON
           </span>
-          {cfg.readOnly && <span style={{ fontSize: 11, color: "#555" }}>· ARCHIVE</span>}
-          <span style={{ fontSize: 11, color: "#555" }}>· {Object.keys(results).length} races complete</span>
+          {cfg.readOnly && <span style={{ fontSize: 11, color: "#AAA" }}>· ARCHIVE</span>}
+          <span style={{ fontSize: 11, color: "#AAA" }}>· {Object.keys(results).length} races complete</span>
         </div>
 
         {loading && (
@@ -525,7 +525,7 @@ export default function FantasyF1App() {
                     </div>
                     <div style={{ textAlign: "right" }}>
                       <div className="pts-badge" style={{ fontSize: 32, color: c.accent }}>{tt[team]}</div>
-                      <div style={{ fontSize: 10, letterSpacing: 2, color: "#555" }}>PTS</div>
+                      <div style={{ fontSize: 10, letterSpacing: 2, color: "#AAA" }}>PTS</div>
                     </div>
                   </div>
                 </div>
@@ -533,7 +533,7 @@ export default function FantasyF1App() {
             })}
             {sorted.length >= 2 && (
               <div style={{ padding: "12px 20px", background: "#13131A", border: "1px solid #1E1E28", borderRadius: 4, display: "flex", gap: 24, flexWrap: "wrap", fontSize: 13, marginBottom: 16 }}>
-                {sorted.slice(1).map(t => <span key={t} style={{ color: "#666" }}>{t} <span style={{ color: "#E8003D" }}>-{tt[sorted[0]]-tt[t]}</span> behind {sorted[0]}</span>)}
+                {sorted.slice(1).map(t => <span key={t} style={{ color: "#999" }}>{t} <span style={{ color: "#E8003D" }}>-{tt[sorted[0]]-tt[t]}</span> behind {sorted[0]}</span>)}
               </div>
             )}
             {!cfg.readOnly && (() => {
@@ -553,7 +553,7 @@ export default function FantasyF1App() {
 
           {/* DRIVER POINTS */}
           {tab === "drivers" && <>
-            <div style={{ fontSize: 11, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 20 }}>Points credited to team owning driver at time of each race</div>
+            <div style={{ fontSize: 11, letterSpacing: 2, color: "#AAA", textTransform: "uppercase", marginBottom: 20 }}>Points credited to team owning driver at time of each race</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 16 }}>
               {TEAMS.map(team => {
                 const c = TEAM_COLORS[team];
@@ -569,19 +569,19 @@ export default function FantasyF1App() {
                       return (
                         <div key={code} className="driver-row">
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <span style={{ width: 18, textAlign: "center", fontSize: 11, color: "#555" }}>{idx+1}</span>
+                            <span style={{ width: 18, textAlign: "center", fontSize: 11, color: "#AAA" }}>{idx+1}</span>
                             <div>
                               <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
                                 {code} {!isCurrent && <span className="fa-badge">FORMER</span>}
                               </div>
-                              <div style={{ fontSize: 11, color: "#555" }}>{F1_DRIVER_MAP[code]}</div>
+                              <div style={{ fontSize: 11, color: "#AAA" }}>{F1_DRIVER_MAP[code]}</div>
                             </div>
                           </div>
-                          <div className="pts-badge" style={{ color: isCurrent ? c.accent : "#555" }}>{info.total}</div>
+                          <div className="pts-badge" style={{ color: isCurrent ? c.accent : "#AAA" }}>{info.total}</div>
                         </div>
                       );
                     })}
-                    {rows.length === 0 && <div style={{ padding: "14px 16px", color: "#444", fontSize: 13 }}>No races scored yet</div>}
+                    {rows.length === 0 && <div style={{ padding: "14px 16px", color: "#888", fontSize: 13 }}>No races scored yet</div>}
                   </div>
                 );
               })}
@@ -590,7 +590,7 @@ export default function FantasyF1App() {
 
           {/* RACE HISTORY */}
           {tab === "history" && <>
-            {rbr.length === 0 && <div style={{ color: "#555", fontSize: 14 }}>No completed races yet.</div>}
+            {rbr.length === 0 && <div style={{ color: "#AAA", fontSize: 14 }}>No completed races yet.</div>}
             {rbr.length > 0 && (
               <div className="card">
                 <div className="card-header"><span style={{ fontSize: 12, letterSpacing: 2, color: "#888" }}>TEAM POINTS BY RACE · click row for driver detail</span></div>
@@ -602,7 +602,7 @@ export default function FantasyF1App() {
                         <tr key={r.round} style={{ cursor: "pointer" }} onClick={() => setSelectedRace(selectedRace === r.round ? null : r.round)}>
                           <td>
                             <div style={{ fontWeight: 600 }}>{r.raceName?.replace(" Grand Prix"," GP")}</div>
-                            <div style={{ fontSize: 11, color: "#555" }}>{new Date(r.date).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>
+                            <div style={{ fontSize: 11, color: "#AAA" }}>{new Date(r.date).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>
                           </td>
                           {TEAMS.map(t => <td key={t} className="pts-badge" style={{ color: TEAM_COLORS[t].accent }}>{r.teamPts[t]||0}</td>)}
                         </tr>
@@ -640,12 +640,12 @@ export default function FantasyF1App() {
                           return (
                             <tr key={code}>
                               <td style={{ color: "#888" }}>{row.position}</td>
-                              <td><span style={{ fontWeight: 600 }}>{code}</span> <span style={{ fontSize: 11, color: "#555" }}>{F1_DRIVER_MAP[code]}</span></td>
-                              <td>{ft ? <span style={{ fontSize: 12, background: TEAM_COLORS[ft]?.accent+"22", color: TEAM_COLORS[ft]?.accent, padding:"2px 8px", borderRadius:2 }}>{ft}</span> : <span style={{ color:"#444",fontSize:12 }}>Free Agent</span>}</td>
+                              <td><span style={{ fontWeight: 600 }}>{code}</span> <span style={{ fontSize: 11, color: "#AAA" }}>{F1_DRIVER_MAP[code]}</span></td>
+                              <td>{ft ? <span style={{ fontSize: 12, background: TEAM_COLORS[ft]?.accent+"22", color: TEAM_COLORS[ft]?.accent, padding:"2px 8px", borderRadius:2 }}>{ft}</span> : <span style={{ color:"#888",fontSize:12 }}>Free Agent</span>}</td>
                               <td>{dnf ? <span className="dnf-badge">DNF</span> : <span style={{ color:"#4CAF50",fontSize:12 }}>✓</span>}</td>
                               <td className="pts-badge" style={{ color: dnf?"#FF4444":"#E8E8F0" }}>{rP}</td>
-                              <td className="pts-badge" style={{ color: sP>0?"#FFD700":"#444" }}>{sP||"—"}</td>
-                              <td className="pts-badge" style={{ color: rP+sP>0?"#E8003D":"#666" }}>{rP+sP}</td>
+                              <td className="pts-badge" style={{ color: sP>0?"#FFD700":"#888" }}>{sP||"—"}</td>
+                              <td className="pts-badge" style={{ color: rP+sP>0?"#E8003D":"#999" }}>{rP+sP}</td>
                             </tr>
                           );
                         })}
@@ -659,13 +659,13 @@ export default function FantasyF1App() {
 
           {/* LINEUPS — public read-only */}
           {tab === "lineups" && <>
-            <div style={{ fontSize: 11, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 4 }}>{season} Driver–Team Assignments by Round</div>
-            <div style={{ fontSize: 12, color: "#444", marginBottom: 14 }}>Showing completed rounds + next 3 · FA = Free Agent</div>
+            <div style={{ fontSize: 11, letterSpacing: 2, color: "#AAA", textTransform: "uppercase", marginBottom: 4 }}>{season} Driver–Team Assignments by Round</div>
+            <div style={{ fontSize: 12, color: "#888", marginBottom: 14 }}>Showing completed rounds + next 3 · FA = Free Agent</div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
               {TEAMS.map(t => (
                 <span key={t} style={{ fontSize: 12, color: TEAM_COLORS[t].accent, background: TEAM_COLORS[t].bg, padding: "3px 12px", borderRadius: 2, border: `1px solid ${TEAM_COLORS[t].accent}44` }}>{t}</span>
               ))}
-              <span style={{ fontSize: 12, color: "#555", background: "#111", padding: "3px 12px", borderRadius: 2, border: "1px solid #222" }}>FA = Free Agent</span>
+              <span style={{ fontSize: 12, color: "#AAA", background: "#111", padding: "3px 12px", borderRadius: 2, border: "1px solid #222" }}>FA = Free Agent</span>
             </div>
             <div className="card">
               <LineupTable lineup={activeLineup} editable={false} rounds={vRounds} />
@@ -675,7 +675,7 @@ export default function FantasyF1App() {
           {/* ADMIN LINEUP EDITOR */}
           {tab === "admin-lineup" && isAdmin && !cfg.readOnly && <>
             <div className="admin-warning">⬡ ADMIN — Click any cell to change a driver's team for that round. The change propagates forward to all remaining rounds. Saves to Supabase instantly.</div>
-            <div style={{ fontSize: 12, color: "#555", marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: "#AAA", marginBottom: 14 }}>
               Click a cell → choose team from dropdown → press Enter or click away to save.
               {editSaving && <span style={{ color: "#E8003D", marginLeft: 12, fontWeight: 700 }}>Saving...</span>}
             </div>
@@ -683,7 +683,7 @@ export default function FantasyF1App() {
               {TEAMS.map(t => (
                 <span key={t} style={{ fontSize: 12, color: TEAM_COLORS[t].accent, background: TEAM_COLORS[t].bg, padding: "3px 12px", borderRadius: 2, border: `1px solid ${TEAM_COLORS[t].accent}44` }}>{t}</span>
               ))}
-              <span style={{ fontSize: 12, color: "#555", background: "#111", padding: "3px 12px", borderRadius: 2, border: "1px solid #222" }}>FA = Free Agent</span>
+              <span style={{ fontSize: 12, color: "#AAA", background: "#111", padding: "3px 12px", borderRadius: 2, border: "1px solid #222" }}>FA = Free Agent</span>
             </div>
             <div className="card">
               <LineupTable lineup={lineup2026} editable={true} rounds={vRounds} />
