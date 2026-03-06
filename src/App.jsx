@@ -50,8 +50,26 @@ function getSprintPoints(position) {
 }
 
 function applyDNFPenalties(dnfs) {
+  // Sort by laps completed descending (most laps = least penalty)
   const sorted = [...dnfs].sort((a, b) => b.lapsCompleted - a.lapsCompleted);
-  return sorted.map((d, i) => ({ ...d, points: -(i + 1) }));
+
+  // Assign penalties with tie handling:
+  // Drivers with the same lap count get the same penalty rank.
+  // The next group skips ahead by the size of the tied group.
+  // e.g. two drivers tie at 10 laps → both get -1; next driver gets -3.
+  const result = [];
+  let rank = 1;
+  for (let i = 0; i < sorted.length; ) {
+    const laps = sorted[i].lapsCompleted;
+    let j = i;
+    while (j < sorted.length && sorted[j].lapsCompleted === laps) j++;
+    for (let k = i; k < j; k++) {
+      result.push({ ...sorted[k], points: -rank });
+    }
+    rank += (j - i);
+    i = j;
+  }
+  return result;
 }
 
 function scoreRace(raceResult) {
@@ -60,9 +78,11 @@ function scoreRace(raceResult) {
   const dnfs = [];
   raceResult.Results.forEach((r) => {
     const code = r.Driver.code;
-    const finished = ["Finished","+1 Lap","+2 Laps","+3 Laps","+4 Laps",
-                      "+5 Laps","+6 Laps","+7 Laps","+8 Laps","+9 Laps","+10 Laps"].includes(r.status);
-    if (!finished) {
+    // Use positionText to determine classified finishers.
+    // positionText is a digit string (e.g. "14") for classified finishers,
+    // including lapped drivers. Non-finishers get "R" (retired), "D" (DSQ), etc.
+    const isClassifiedFinisher = /^\d+$/.test(r.positionText || "");
+    if (!isClassifiedFinisher) {
       dnfs.push({ code, lapsCompleted: parseInt(r.laps) || 0 });
     } else {
       scores[code] = { race: getRacePoints(parseInt(r.position)), dnf: false };
