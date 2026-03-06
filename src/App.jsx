@@ -15,8 +15,9 @@ const F1_DRIVER_MAP = {
   HAM: "Lewis Hamilton",     ANT: "Kimi Antonelli",    ALB: "Alexander Albon",
   OCO: "Esteban Ocon",       GAS: "Pierre Gasly",      LAW: "Liam Lawson",
   HAD: "Isack Hadjar",       BEA: "Oliver Bearman",    BOR: "Gabriel Bortoleto",
-  HUL: "Nico Hulkenberg",    TSU: "Yuki Tsunoda",      STR: "Lance Stroll",
-  ALO: "Fernando Alonso",    COL: "Franco Colapinto",  DOO: "Jack Doohan",
+  HUL: "Nico Hulkenberg",    BOT: "Valtteri Bottas",   STR: "Lance Stroll",
+  ALO: "Fernando Alonso",    COL: "Franco Colapinto",  PER: "Sergio Perez",
+  LIN: "Arvid Lindblad",
 };
 
 // Row order in lineup table: by team grouping
@@ -24,7 +25,7 @@ const DRIVER_ORDER_2026 = [
   "NOR","VER","SAI","BOR","LAW",
   "RUS","PIA","HAM","OCO","ALB",
   "LEC","ANT","HAD","BEA","GAS",
-  "HUL","TSU","STR","ALO","COL","DOO",
+  "HUL","BOT","STR","ALO","COL","PER","LIN",
 ];
 const DRIVER_ORDER_2025 = [
   "NOR","HAM","ANT","ALB","TSU","HUL",
@@ -70,8 +71,8 @@ const DEFAULT_LINEUP_2026 = makeLineup({
   NOR:"SoCal", VER:"SoCal", SAI:"SoCal", BOR:"SoCal", LAW:"SoCal",
   RUS:"NoCal", PIA:"NoCal", HAM:"NoCal", OCO:"NoCal", ALB:"NoCal",
   LEC:"Cuz",   ANT:"Cuz",   HAD:"Cuz",   BEA:"Cuz",   GAS:"Cuz",
-  HUL:"Free Agent", TSU:"Free Agent", STR:"Free Agent",
-  ALO:"Free Agent", COL:"Free Agent", DOO:"Free Agent",
+  HUL:"Free Agent", BOT:"Free Agent", STR:"Free Agent",
+  ALO:"Free Agent", COL:"Free Agent", PER:"Free Agent", LIN:"Free Agent"
 });
 
 // ── SEASON CONFIG ─────────────────────────────────────────────────────────────
