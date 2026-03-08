@@ -101,8 +101,10 @@ function applyDNFPenalties(dnfs) {
   return result;
 }
 
-// Checks BOTH positionText (NC) AND status column (DNF, DNS, DSQ).
-// DSQ drivers get 0 laps completed = maximum penalty.
+// A driver truly finished only if status is "Finished" or a lapped variant ("+1 Lap", "+2 Laps", etc.).
+// Every other status — regardless of whether positionText is numeric — is treated as a non-finish.
+// This correctly handles cases like Norris at 2025 R15 who had a numeric position but a DNF status.
+// DSQ drivers receive 0 laps completed so they always get the maximum penalty.
 function scoreRace(raceResult, year) {
   if (!raceResult?.Results) return {};
   const scores = {}, dnfs = [];
@@ -110,24 +112,33 @@ function scoreRace(raceResult, year) {
   raceResult.Results.forEach(r => {
     const code    = r.Driver.code;
     const posText = (r.positionText || "").trim().toUpperCase();
-    const status  = (r.status || "").trim().toUpperCase();
+    const rawStatus = r.status || "";
+
+    // "Finished" or "+N Lap(s)" = genuinely classified finisher
+    const isFinished = (/^finished$/i.test(rawStatus) || /^\+\d+\s+lap/i.test(rawStatus)) && posText !== "NC";
 
     const isNC  = posText === "NC";
-    const isDNF = status === "DNF" || status.includes("DNF");
-    const isDNS = status === "DNS" || status.includes("DNS");
-    const isDSQ = posText === "DSQ" || status === "DSQ" || status.includes("DSQ") || status.includes("DISQ");
+    const isDSQ = posText === "DSQ" || /disq/i.test(rawStatus);
+    const isDNS = /did not start/i.test(rawStatus) || /^dns$/i.test(rawStatus);
+    // Any non-finished, non-DSQ, non-DNS driver is a DNF
+    const isDNF = !isFinished && !isDSQ && !isDNS;
 
-    const didNotFinish = isNC || isDNF || isDNS || isDSQ;
+    const didNotFinish = isDNF || isDSQ || isDNS; // note: NC alone is caught inside isDNF
 
-    if (!didNotFinish && /^\d+$/.test(posText)) {
+    if (!didNotFinish) {
+      // Genuine finisher
       scores[code] = { race: getRacePoints(parseInt(r.position), year), dnf: false, dnfLabel: null };
     } else {
-      let dnfLabel = "NC";
+      // Determine the most severe / descriptive label
+      let dnfLabel;
       if (isDSQ)      dnfLabel = "DSQ";
       else if (isDNS) dnfLabel = "DNS";
-      else if (isDNF) dnfLabel = "DNF";
+      else if (isNC)  dnfLabel = "NC";   // NC with no other status info
+      else            dnfLabel = "DNF";  // retired for any other reason
 
+      // DSQ = 0 laps so they always get the maximum penalty
       const lapsCompleted = isDSQ ? 0 : (parseInt(r.laps) || 0);
+
       dnfs.push({ code, lapsCompleted, dnfLabel, isNC });
     }
   });
@@ -239,11 +250,11 @@ export default function FantasyF1App() {
           fetchSprintResult(season, race.round).catch(() => null),
         ]);
         nr[race.round] = {
-          race: rr ? scoreRace(rr, season) : {},
-          sprint: sr ? scoreSprint(sr) : {},
+          race:     rr ? scoreRace(rr, season) : {},
+          sprint:   sr ? scoreSprint(sr) : {},
           raceName: race.raceName,
-          date: race.date,
-          rawRace: rr,
+          date:     race.date,
+          rawRace:  rr,
         };
       }
       setResults(nr);
@@ -673,7 +684,7 @@ export default function FantasyF1App() {
                                   <div style={{ fontSize:12, color:"#CCC", fontWeight:600 }}>{F1_DRIVER_MAP[code]}</div>
                                 </td>
                                 {rbr.map(r => {
-                                  const owned  = r.ownership?.[code] === team;
+                                  const owned   = r.ownership?.[code] === team;
                                   const racePts = owned ? (r.race[code]?.race ?? 0) : null;
                                   const spPts   = owned ? (r.sprint[code]?.sprint || 0) : null;
                                   const total   = racePts !== null ? racePts + spPts : null;
@@ -807,6 +818,8 @@ export default function FantasyF1App() {
                           const label = r.race[code]?.dnfLabel;
                           const laps  = r.race[code]?.lapsCompleted;
                           const isNC  = r.race[code]?.isNC;
+
+                          // Build status cell: show NC badge AND reason badge when both apply
                           const statusCell = dnf ? (
                             <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:3 }}>
                               {isNC && label !== "NC" && <span className="badge-nc">NC</span>}
@@ -821,6 +834,7 @@ export default function FantasyF1App() {
                           ) : (
                             <span style={{ color:"#4CAF50", fontSize:13, fontWeight:700 }}>✓ Finished</span>
                           );
+
                           return (
                             <tr key={code}>
                               <td style={{ color:"#AAA", fontSize:13 }}>{row.position}</td>
