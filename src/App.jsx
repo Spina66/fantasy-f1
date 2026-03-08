@@ -115,13 +115,13 @@ function scoreRace(raceResult, year) {
     const rawStatus = r.status || "";
 
     // "Finished" or "+N Lap(s)" = genuinely classified finisher
+    const isFinished = (/^finished$/i.test(rawStatus) || /^lapped$/i.test(rawStatus))
+                       && posText !== "R" && posText !== "W" && posText !== "D";
+    const isDSQ = posText === "D" || /disq/i.test(rawStatus);
+    const isDNS = posText === "W" || /^did not start$/i.test(rawStatus);
     const isNC  = posText === "NC";
-    const isLapped = /^\+\d+\s+lap/i.test(rawStatus);
-    const isFinished = /^finished$/i.test(rawStatus) || (isLapped && !isNC);
-    const isDSQ = posText === "DSQ" || /disq/i.test(rawStatus);
-    const isDNS = /did not start/i.test(rawStatus) || /^dns$/i.test(rawStatus);
-    // Any non-finished, non-DSQ, non-DNS driver is a DNF
     const isDNF = !isFinished && !isDSQ && !isDNS;
+
     const didNotFinish = isDNF || isDSQ || isDNS;
 
     if (!didNotFinish) {
