@@ -2,25 +2,28 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // ── CONFIG ────────────────────────────────────────────────────────────────────
-// !! REPLACE THESE TWO VALUES WITH YOUR OWN FROM THE CURRENT App.jsx ON GITHUB !!
 const SUPABASE_URL = "https://jdbrruuzberopdrlxwvn.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpkYnJydXV6YmVyb3Bkcmx4d3ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3NjY5ODcsImV4cCI6MjA4ODM0Mjk4N30.A-fK5M_uh5WsPaRdSyQAfqHLY-Gm0v-KPP6aDyKp1mI";
 const ADMIN_PASSWORD = "f1spina";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// ── GOOGLE SHEET CONFIG ───────────────────────────────────────────────────────
+// Published CSV URL for the "Results" tab — update if the sheet URL ever changes
+const SHEET_CSV_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vS09py3RUvDHefcT4J5ZVCjW5UVi-qsSA5Nyo6pJ8pKM2gqn6bTJd5RU3UKNNhTnTNcm517OBXIsjx9/pub?gid=1316044119&single=true&output=csv";
+
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 const F1_DRIVER_MAP = {
-  VER: "Max Verstappen",     NOR: "Lando Norris",      LEC: "Charles Leclerc",
-  PIA: "Oscar Piastri",      SAI: "Carlos Sainz",      RUS: "George Russell",
-  HAM: "Lewis Hamilton",     ANT: "Kimi Antonelli",    ALB: "Alexander Albon",
-  OCO: "Esteban Ocon",       GAS: "Pierre Gasly",      LAW: "Liam Lawson",
-  HAD: "Isack Hadjar",       BEA: "Oliver Bearman",    BOR: "Gabriel Bortoleto",
-  HUL: "Nico Hulkenberg",    BOT: "Valtteri Bottas",   STR: "Lance Stroll",
-  ALO: "Fernando Alonso",    COL: "Franco Colapinto",  PER: "Sergio Perez",
-  LIN: "Arvid Lindblad",     TSU: "Yuki Tsunoda",      DOO: "Jack Doohan",
+  VER: "Max Verstappen",    NOR: "Lando Norris",      LEC: "Charles Leclerc",
+  PIA: "Oscar Piastri",     SAI: "Carlos Sainz",      RUS: "George Russell",
+  HAM: "Lewis Hamilton",    ANT: "Kimi Antonelli",    ALB: "Alexander Albon",
+  OCO: "Esteban Ocon",      GAS: "Pierre Gasly",      LAW: "Liam Lawson",
+  HAD: "Isack Hadjar",      BEA: "Oliver Bearman",    BOR: "Gabriel Bortoleto",
+  HUL: "Nico Hulkenberg",   BOT: "Valtteri Bottas",   STR: "Lance Stroll",
+  ALO: "Fernando Alonso",   COL: "Franco Colapinto",  PER: "Sergio Perez",
+  LIN: "Arvid Lindblad",    TSU: "Yuki Tsunoda",      DOO: "Jack Doohan",
 };
 
-// Row order in lineup table: by team grouping
 const DRIVER_ORDER_2026 = [
   "NOR","VER","SAI","BOR","LAW",
   "RUS","PIA","HAM","OCO","ALB",
@@ -69,7 +72,7 @@ const DEFAULT_LINEUP_2026 = makeLineup({
   RUS:"NoCal", PIA:"NoCal", HAM:"NoCal", OCO:"NoCal", ALB:"NoCal",
   LEC:"Cuz",   ANT:"Cuz",   HAD:"Cuz",   BEA:"Cuz",   GAS:"Cuz",
   HUL:"Free Agent", BOT:"Free Agent", STR:"Free Agent",
-  ALO:"Free Agent", COL:"Free Agent", PER:"Free Agent", LIN:"Free Agent"
+  ALO:"Free Agent", COL:"Free Agent", PER:"Free Agent", LIN:"Free Agent",
 });
 
 // ── SEASON CONFIG ─────────────────────────────────────────────────────────────
@@ -79,7 +82,7 @@ const SEASON_CONFIG = {
   2026: { firstPlacePoints: 22, totalDrivers: 22, readOnly: false },
 };
 
-// ── SCORING ───────────────────────────────────────────────────────────────────
+// ── SCORING HELPERS ───────────────────────────────────────────────────────────
 
 function getRacePoints(position, year) {
   const { firstPlacePoints, totalDrivers } = SEASON_CONFIG[year];
@@ -90,72 +93,19 @@ function getRacePoints(position, year) {
 function getSprintPoints(pos) { return [8,7,6,5,4,3,2,1][pos-1] || 0; }
 
 function applyDNFPenalties(dnfs) {
-  const sorted = [...dnfs].sort((a,b) => b.lapsCompleted - a.lapsCompleted);
-  const result = []; let rank = 1;
+  // Rank by laps completed descending; ties share the same penalty rank
+  const sorted = [...dnfs].sort((a, b) => b.lapsCompleted - a.lapsCompleted);
+  const result = [];
+  let rank = 1;
   for (let i = 0; i < sorted.length;) {
-    const laps = sorted[i].lapsCompleted; let j = i;
+    const laps = sorted[i].lapsCompleted;
+    let j = i;
     while (j < sorted.length && sorted[j].lapsCompleted === laps) j++;
     for (let k = i; k < j; k++) result.push({ ...sorted[k], points: -rank });
-    rank += (j - i); i = j;
+    rank += (j - i);
+    i = j;
   }
   return result;
-}
-
-// A driver truly finished only if status is "Finished" or a lapped variant ("+1 Lap", "+2 Laps", etc.).
-// Every other status — regardless of whether positionText is numeric — is treated as a non-finish.
-// This correctly handles cases like Norris at 2025 R15 who had a numeric position but a DNF status.
-// DSQ drivers receive 0 laps completed so they always get the maximum penalty.
-function scoreRace(raceResult, year) {
-  if (!raceResult?.Results) return {};
-  const scores = {}, dnfs = [];
-
-  raceResult.Results.forEach(r => {
-    const code    = r.Driver.code;
-    const posText = (r.positionText || "").trim().toUpperCase();
-    const rawStatus = r.status || "";
-
-    // "Finished" or "+N Lap(s)" = genuinely classified finisher
-    const isFinished = (/^finished$/i.test(rawStatus) || /^lapped$/i.test(rawStatus))
-                       && posText !== "R" && posText !== "W" && posText !== "D";
-    const isDSQ = posText === "D" || /disq/i.test(rawStatus);
-    const isDNS = posText === "W" || /^did not start$/i.test(rawStatus);
-    const isNC  = posText === "NC";
-    const isDNF = !isFinished && !isDSQ && !isDNS;
-
-    const didNotFinish = isDNF || isDSQ || isDNS;
-
-    if (!didNotFinish) {
-      // Genuine finisher
-      scores[code] = { race: getRacePoints(parseInt(r.position), year), dnf: false, dnfLabel: null };
-    } else {
-      // Determine the most severe / descriptive label
-      let dnfLabel;
-      if (isDSQ)      dnfLabel = "DSQ";
-      else if (isDNS) dnfLabel = "DNS";
-      else if (isNC)  dnfLabel = "NC";   // NC with no other status info
-      else            dnfLabel = "DNF";  // retired for any other reason
-
-      // DSQ = 0 laps so they always get the maximum penalty
-      const lapsCompleted = isDSQ ? 0 : (parseInt(r.laps) || 0);
-
-      dnfs.push({ code, lapsCompleted, dnfLabel, isNC });
-    }
-  });
-
-  applyDNFPenalties(dnfs).forEach(({ code, points, lapsCompleted, dnfLabel, isNC }) => {
-    scores[code] = { race: points, dnf: true, dnfLabel, lapsCompleted, isNC };
-  });
-
-  return scores;
-}
-
-function scoreSprint(sprintResult) {
-  if (!sprintResult?.SprintResults) return {};
-  const scores = {};
-  sprintResult.SprintResults.forEach(r => {
-    scores[r.Driver.code] = { sprint: getSprintPoints(parseInt(r.position)) };
-  });
-  return scores;
 }
 
 function getOwnershipAtRound(lineup, round) {
@@ -167,13 +117,158 @@ function getOwnershipAtRound(lineup, round) {
   return ownership;
 }
 
-// ── F1 API ────────────────────────────────────────────────────────────────────
+// ── GOOGLE SHEET CSV PARSER ───────────────────────────────────────────────────
+
+function parseCSV(text) {
+  const lines = text.trim().split("\n").map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) return [];
+  // Normalise headers: lowercase, "/" → "_"
+  const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/\//g, "_"));
+  return lines.slice(1).map(line => {
+    const cols = [];
+    let cur = "", inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === "," && !inQ) { cols.push(cur.trim()); cur = ""; }
+      else cur += ch;
+    }
+    cols.push(cur.trim());
+    return Object.fromEntries(headers.map((h, i) => [h, cols[i] ?? ""]));
+  });
+}
+
+// ── SHEET ROW CLASSIFIER ──────────────────────────────────────────────────────
+//
+// PENALTY if ANY of:
+//   • position  === "NC"   (not classified — includes lapped Stroll case)
+//   • position  === "DQ"   (disqualified variant)
+//   • time_retired === "DNF"  (retired but may still have numeric position — NOR R15)
+//   • time_retired === "DNS"  (did not start)
+//   • time_retired === "DSQ"  (disqualified)
+//
+// FINISHER otherwise (numeric position AND time_retired is a time string)
+//
+// DNF LABEL for badge:
+//   "DSQ"  if position="DQ"  OR time_retired="DSQ"          → laps forced 0
+//   "DNS"  if time_retired="DNS"                             → laps forced 0
+//   "NC"   if position="NC"  AND time_retired is NOT DNF/DNS/DSQ
+//          (ran but not classified — e.g. Stroll "+15 laps")
+//   "DNF"  everything else that is a penalty
+
+function classifySheetRow(row) {
+  const code    = (row.driver_code || "").trim().toUpperCase();
+  const posRaw  = (row.position    || "").trim().toUpperCase();
+  const trRaw   = (row["time_retired"] || row["time/retired"] || "").trim().toUpperCase();
+  const lapsRaw = parseInt(row.laps) || 0;
+
+  const posIsNC  = posRaw === "NC";
+  const posIsDQ  = posRaw === "DQ";
+  const trIsDNF  = trRaw  === "DNF";
+  const trIsDNS  = trRaw  === "DNS";
+  const trIsDSQ  = trRaw  === "DSQ";
+
+  const isPenalty  = posIsNC || posIsDQ || trIsDNF || trIsDNS || trIsDSQ;
+  const isFinisher = !isPenalty;
+
+  let dnfLabel = null;
+  if (isPenalty) {
+    if      (posIsDQ || trIsDSQ)       dnfLabel = "DSQ";
+    else if (trIsDNS)                  dnfLabel = "DNS";
+    else if (posIsNC && !trIsDNF)      dnfLabel = "NC";   // ran, but not classified
+    else                               dnfLabel = "DNF";  // trIsDNF or any remaining case
+  }
+
+  // DSQ and DNS always rank worst (0 laps); everything else uses the sheet value
+  const lapsCompleted = (dnfLabel === "DSQ" || dnfLabel === "DNS") ? 0 : lapsRaw;
+
+  // Finishing position only meaningful for classified finishers
+  const position = isFinisher ? (parseInt(posRaw) || 0) : 0;
+
+  return { code, isFinisher, position, lapsCompleted, dnfLabel };
+}
+
+// ── SHEET-BASED RACE SCORER ───────────────────────────────────────────────────
+
+function scoreRaceFromSheet(rows, year) {
+  if (!rows?.length) return { scores: {}, driverList: [] };
+  const scores     = {};
+  const dnfs       = [];
+  const driverList = []; // used by the Race Detail view
+
+  rows.forEach(row => {
+    const { code, isFinisher, position, lapsCompleted, dnfLabel } = classifySheetRow(row);
+    if (!code) return;
+
+    driverList.push({
+      code,
+      positionDisplay: (row.position || "").trim().toUpperCase(),
+      lapsCompleted,
+      dnfLabel,
+    });
+
+    if (isFinisher) {
+      scores[code] = { race: getRacePoints(position, year), dnf: false, dnfLabel: null };
+    } else {
+      dnfs.push({ code, lapsCompleted, dnfLabel });
+    }
+  });
+
+  applyDNFPenalties(dnfs).forEach(({ code, points, lapsCompleted, dnfLabel }) => {
+    scores[code] = { race: points, dnf: true, dnfLabel, lapsCompleted };
+  });
+
+  return { scores, driverList };
+}
+
+// ── SHEET-BASED SPRINT SCORER ─────────────────────────────────────────────────
+// Sprint: numeric position → sprint points; non-finishers get 0 (no penalty).
+
+function scoreSprintFromSheet(rows) {
+  if (!rows?.length) return {};
+  const scores = {};
+  rows.forEach(row => {
+    const code = (row.driver_code || "").trim().toUpperCase();
+    const pos  = parseInt((row.position || "").trim());
+    if (code) scores[code] = { sprint: isNaN(pos) ? 0 : getSprintPoints(pos) };
+  });
+  return scores;
+}
+
+// ── SHEET DATA LOADER ─────────────────────────────────────────────────────────
+// One fetch, all seasons:  sheetData[season][round] = { race: rows[], sprint: rows[] }
+
+async function fetchSheetData() {
+  const res = await fetch(SHEET_CSV_URL);
+  if (!res.ok) throw new Error(`Sheet fetch failed: HTTP ${res.status}`);
+  const text    = await res.text();
+  const rows    = parseCSV(text);
+  const grouped = {};
+
+  for (const row of rows) {
+    const season  = parseInt(row.season);
+    const round   = String(parseInt(row.round));
+    const session = (row.session || "").trim().toLowerCase();
+    if (!season || isNaN(parseInt(row.round)) || !session) continue;
+    if (!grouped[season])        grouped[season] = {};
+    if (!grouped[season][round]) grouped[season][round] = { race: [], sprint: [] };
+    if (session === "race")      grouped[season][round].race.push(row);
+    if (session === "sprint")    grouped[season][round].sprint.push(row);
+  }
+  return grouped;
+}
+
+// ── JOLPICA — schedule only ───────────────────────────────────────────────────
 
 const BASE = "https://api.jolpi.ca/ergast/f1";
-async function fetchJSON(url) { const r = await fetch(url); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }
-async function fetchSchedule(year) { const d = await fetchJSON(`${BASE}/${year}/races.json?limit=30`); return d.MRData.RaceTable.Races; }
-async function fetchRaceResult(year, round) { const d = await fetchJSON(`${BASE}/${year}/${round}/results.json`); return d.MRData.RaceTable.Races[0]; }
-async function fetchSprintResult(year, round) { try { const d = await fetchJSON(`${BASE}/${year}/${round}/sprint.json`); return d.MRData.RaceTable.Races[0]; } catch { return null; } }
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+async function fetchSchedule(year) {
+  const d = await fetchJSON(`${BASE}/${year}/races.json?limit=30`);
+  return d.MRData.RaceTable.Races;
+}
 
 // ── APP ───────────────────────────────────────────────────────────────────────
 
@@ -188,7 +283,7 @@ export default function FantasyF1App() {
   const [results, setResults]           = useState({});
   const [lineup2026, setLineup2026]     = useState(DEFAULT_LINEUP_2026);
   const [loading, setLoading]           = useState(true);
-  const [loadingRace, setLoadingRace]   = useState(null);
+  const [loadingMsg, setLoadingMsg]     = useState("");
   const [error, setError]               = useState(null);
   const [selectedRace, setSelectedRace] = useState(null);
   const [editCell, setEditCell]         = useState(null);
@@ -209,7 +304,9 @@ export default function FantasyF1App() {
       if (error) throw error;
       if (data?.length) {
         const grid = JSON.parse(JSON.stringify(DEFAULT_LINEUP_2026));
-        data.forEach(({ driver, round, team }) => { if (grid[driver]) grid[driver][String(round)] = team; });
+        data.forEach(({ driver, round, team }) => {
+          if (grid[driver]) grid[driver][String(round)] = team;
+        });
         setLineup2026(grid);
       }
     } catch(e) { console.warn("Supabase not ready:", e.message); }
@@ -225,7 +322,9 @@ export default function FantasyF1App() {
         updated[driver][String(r)] = newTeam;
         rows.push({ driver, round: r, team: newTeam });
       }
-      const { error } = await supabase.from("lineup_2026").upsert(rows, { onConflict: "driver,round" });
+      const { error } = await supabase
+        .from("lineup_2026")
+        .upsert(rows, { onConflict: "driver,round" });
       if (error) throw error;
       setLineup2026(updated);
       setEditCell(null);
@@ -233,60 +332,96 @@ export default function FantasyF1App() {
     finally { setEditSaving(false); }
   };
 
-  // ── F1 data ───────────────────────────────────────────────────────────────
+  // ── Main data loader ──────────────────────────────────────────────────────
+  //
+  // 1. Fetch race schedule from Jolpica  (names, dates, circuit info)
+  // 2. Fetch all results from Google Sheet  (primary / only scoring source)
+  // 3. Build per-round result objects:
+  //      sprintOnly = sheet has sprint rows but NO race rows yet
+  //      full       = sheet has race rows (± sprint rows)
 
   const loadData = useCallback(async () => {
-    setLoading(true); setError(null); setResults({}); setSchedule([]); setSelectedRace(null);
+    setLoading(true); setError(null); setResults({});
+    setSchedule([]); setSelectedRace(null);
     try {
-      const races = await fetchSchedule(season);
+      setLoadingMsg("Loading schedule...");
+      const races = await fetchSchedule(season).catch(() => []);
       setSchedule(races);
-      const completed = races.filter(r => new Date(r.date) < new Date());
+
+      setLoadingMsg("Loading results from Google Sheet...");
+      const sheetData  = await fetchSheetData();
+      const seasonData = sheetData[season] || {};
+
       const nr = {};
-      for (const race of completed) {
-        setLoadingRace(race.raceName);
-        const [rr, sr] = await Promise.all([
-          fetchRaceResult(season, race.round).catch(() => null),
-          fetchSprintResult(season, race.round).catch(() => null),
-        ]);
-        nr[race.round] = {
-          race:     rr ? scoreRace(rr, season) : {},
-          sprint:   sr ? scoreSprint(sr) : {},
-          raceName: race.raceName,
-          date:     race.date,
-          rawRace:  rr,
+      for (const [round, sessions] of Object.entries(seasonData)) {
+        const hasRace   = sessions.race.length   > 0;
+        const hasSprint = sessions.sprint.length > 0;
+        if (!hasRace && !hasSprint) continue;
+
+        // Match schedule entry for race name + date
+        const schedRace = races.find(
+          r => String(parseInt(r.round)) === String(parseInt(round))
+        );
+        const raceName = schedRace?.raceName || `Round ${round}`;
+        const date     = schedRace?.date     || "";
+
+        const { scores: raceScores, driverList } = hasRace
+          ? scoreRaceFromSheet(sessions.race, season)
+          : { scores: {}, driverList: [] };
+
+        const sprintScores = hasSprint
+          ? scoreSprintFromSheet(sessions.sprint)
+          : {};
+
+        nr[round] = {
+          race:       raceScores,
+          sprint:     sprintScores,
+          raceName,
+          date,
+          driverList,              // for Race Detail panel
+          sprintRows: sessions.sprint, // for Sprint-Only Detail panel
+          sprintOnly: !hasRace && hasSprint,
         };
       }
+
       setResults(nr);
     } catch(e) { setError(e.message); }
-    finally { setLoading(false); setLoadingRace(null); }
+    finally { setLoading(false); setLoadingMsg(""); }
   }, [season]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadData(); },   [loadData]);
   useEffect(() => { loadLineup(); }, [loadLineup]);
-  useEffect(() => { if (editCell && editRef.current) editRef.current.focus(); }, [editCell]);
-
-  // Auto-scroll to driver detail when a race row is clicked
+  useEffect(() => {
+    if (editCell && editRef.current) editRef.current.focus();
+  }, [editCell]);
   useEffect(() => {
     if (selectedRace && detailRef.current) {
-      setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+      setTimeout(() => detailRef.current?.scrollIntoView({ behavior:"smooth", block:"start" }), 60);
     }
   }, [selectedRace]);
 
   const handleSeasonChange = (yr) => {
-    setSeason(parseInt(yr)); setTab("standings");
+    setSeason(parseInt(yr));
+    setTab("standings");
     if (SEASON_CONFIG[yr].readOnly) setIsAdmin(false);
   };
 
   // ── Computed ──────────────────────────────────────────────────────────────
 
   const raceByRace = useCallback(() =>
-    Object.entries(results).sort((a,b) => parseInt(a[0])-parseInt(b[0])).map(([round, data]) => {
-      const ownership = getOwnershipAtRound(activeLineup, round);
-      const teamPts = Object.fromEntries(TEAMS.map(t => [t, 0]));
-      Object.entries(data.race).forEach(([code, s]) => { const t = ownership[code]; if (t) teamPts[t] = (teamPts[t]||0) + s.race; });
-      Object.entries(data.sprint).forEach(([code, s]) => { const t = ownership[code]; if (t) teamPts[t] = (teamPts[t]||0) + s.sprint; });
-      return { round, ...data, teamPts, ownership };
-    })
+    Object.entries(results)
+      .sort((a, b) => parseInt(a[0]) - parseInt(b[0]))
+      .map(([round, data]) => {
+        const ownership = getOwnershipAtRound(activeLineup, round);
+        const teamPts   = Object.fromEntries(TEAMS.map(t => [t, 0]));
+        Object.entries(data.race).forEach(([code, s]) => {
+          const t = ownership[code]; if (t) teamPts[t] += s.race;
+        });
+        Object.entries(data.sprint).forEach(([code, s]) => {
+          const t = ownership[code]; if (t) teamPts[t] += s.sprint;
+        });
+        return { round, ...data, teamPts, ownership };
+      })
   , [results, activeLineup]);
 
   const teamTotals = useCallback(() => {
@@ -300,13 +435,12 @@ export default function FantasyF1App() {
     return getOwnershipAtRound(activeLineup, last);
   }, [results, activeLineup]);
 
-  // All drivers that ever scored for each team
   const driverTeamScores = useCallback(() => {
     const scores = {}; TEAMS.forEach(t => { scores[t] = {}; });
     raceByRace().forEach(({ race, sprint, ownership }) => {
       Object.keys(F1_DRIVER_MAP).forEach(code => {
         const team = ownership[code]; if (!team) return;
-        const pts = (race[code]?.race||0) + (sprint[code]?.sprint||0);
+        const pts  = (race[code]?.race || 0) + (sprint[code]?.sprint || 0);
         if (!scores[team][code]) scores[team][code] = { total: 0 };
         scores[team][code].total += pts;
       });
@@ -315,34 +449,57 @@ export default function FantasyF1App() {
   }, [raceByRace]);
 
   const visibleRounds = useCallback(() => {
-    const completed = schedule.filter(r => new Date(r.date) < new Date()).map(r => parseInt(r.round));
-    const maxDone = completed.length ? Math.max(...completed) : 0;
-    const upTo = Math.min(24, maxDone + 3);
+    const doneRounds = Object.keys(results).map(Number);
+    const maxDone    = doneRounds.length ? Math.max(...doneRounds) : 0;
+    const upTo       = Math.min(24, maxDone + 3);
     return Array.from({ length: Math.max(upTo, 3) }, (_, i) => String(i + 1));
-  }, [schedule]);
+  }, [results]);
 
   const handleLogin = () => {
-    if (pwInput === ADMIN_PASSWORD) { setIsAdmin(true); setShowLogin(false); setPwError(false); setTab("admin-lineup"); }
-    else setPwError(true);
+    if (pwInput === ADMIN_PASSWORD) {
+      setIsAdmin(true); setShowLogin(false); setPwError(false); setTab("admin-lineup");
+    } else setPwError(true);
   };
 
-  // ── Lineup table component ────────────────────────────────────────────────
+  // ── Status badge helper ───────────────────────────────────────────────────
+
+  const StatusBadge = ({ dnfLabel, lapsCompleted }) => {
+    if (!dnfLabel) {
+      return <span style={{ color:"#4CAF50", fontSize:13, fontWeight:700 }}>✓ Finished</span>;
+    }
+    const lapsStr = lapsCompleted === 0 ? "0 laps"
+                  : lapsCompleted != null ? `${lapsCompleted} laps`
+                  : "";
+    return (
+      <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:3 }}>
+        {dnfLabel === "DSQ" && <span className="badge-dsq">DSQ</span>}
+        {dnfLabel === "DNS" && <span className="badge-dns">DNS</span>}
+        {dnfLabel === "DNF" && <span className="badge-dnf">DNF</span>}
+        {dnfLabel === "NC"  && <span className="badge-nc">NC</span>}
+        {lapsStr && (
+          <span style={{ fontSize:12, color:"#AAA", fontWeight:600, marginLeft:2 }}>{lapsStr}</span>
+        )}
+      </div>
+    );
+  };
+
+  // ── Lineup table ──────────────────────────────────────────────────────────
 
   const LineupTable = ({ lineup, editable, rounds }) => {
     const drivers = driverOrder.filter(d => lineup[d]);
-    const groupOf = (code) => {
+    const groupOf = code => {
       const t = lineup[code]?.["1"] || "Free Agent";
       return t === "Free Agent" ? "Free Agent" : t;
     };
     return (
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "auto" }}>
+      <div style={{ overflowX:"auto" }}>
+        <table style={{ width:"auto" }}>
           <thead>
             <tr>
               <th style={{ position:"sticky", left:0, background:"#0D0D14", zIndex:2, minWidth:120, textAlign:"left", padding:"10px 14px" }}>Driver</th>
               {rounds.map(r => {
-                const raceInfo = schedule.find(s => s.round === r);
-                const isDone = raceInfo && new Date(raceInfo.date) < new Date();
+                const raceInfo = schedule.find(s => String(parseInt(s.round)) === String(parseInt(r)));
+                const isDone   = results[r] !== undefined;
                 return (
                   <th key={r} style={{ minWidth:66, textAlign:"center", padding:"8px 4px", color: isDone ? "#CCC" : "#888" }}>
                     R{r}
@@ -358,14 +515,14 @@ export default function FantasyF1App() {
           </thead>
           <tbody>
             {drivers.map((code, idx) => {
-              const prevGroup = idx > 0 ? groupOf(drivers[idx-1]) : null;
-              const currGroup = groupOf(code);
+              const prevGroup   = idx > 0 ? groupOf(drivers[idx-1]) : null;
+              const currGroup   = groupOf(code);
               const showDivider = prevGroup && prevGroup !== currGroup;
               return (
                 <>
                   {showDivider && (
                     <tr key={`div-${code}`}>
-                      <td colSpan={rounds.length + 1} style={{ padding:"2px 0", background:"#0A0A0F", borderBottom:"1px solid #1E1E28" }} />
+                      <td colSpan={rounds.length+1} style={{ padding:"2px 0", background:"#0A0A0F", borderBottom:"1px solid #1E1E28" }} />
                     </tr>
                   )}
                   <tr key={code}>
@@ -374,8 +531,8 @@ export default function FantasyF1App() {
                       <div style={{ fontSize:12, color:"#CCC", fontWeight:600 }}>{F1_DRIVER_MAP[code]}</div>
                     </td>
                     {rounds.map(r => {
-                      const team = lineup[code]?.[r] || "Free Agent";
-                      const tc = TEAM_COLORS[team] || TEAM_COLORS["Free Agent"];
+                      const team      = lineup[code]?.[r] || "Free Agent";
+                      const tc        = TEAM_COLORS[team] || TEAM_COLORS["Free Agent"];
                       const isEditing = editable && editCell?.driver === code && editCell?.round === r;
                       return (
                         <td key={r} style={{ textAlign:"center", padding:"3px 2px", borderBottom:"1px solid #141418", background: isEditing ? "#1A1A2A" : tc.bg }}>
@@ -386,7 +543,7 @@ export default function FantasyF1App() {
                               onChange={e => setEditValue(e.target.value)}
                               onBlur={() => { if (editValue !== team) saveCell(code, r, editValue); else setEditCell(null); }}
                               onKeyDown={e => {
-                                if (e.key==="Enter") { if (editValue !== team) saveCell(code, r, editValue); else setEditCell(null); }
+                                if (e.key==="Enter")  { if (editValue !== team) saveCell(code, r, editValue); else setEditCell(null); }
                                 if (e.key==="Escape") setEditCell(null);
                               }}
                               style={{ background:"#13131A", border:"1px solid #E8003D", color:"#E8E8F0", fontSize:11, padding:"2px 3px", borderRadius:2, width:62, fontFamily:"'Rajdhani',sans-serif" }}
@@ -396,13 +553,7 @@ export default function FantasyF1App() {
                           ) : (
                             <div
                               onClick={() => { if (!editable) return; setEditCell({ driver:code, round:r }); setEditValue(team); }}
-                              style={{
-                                display:"inline-block", fontSize:11, fontWeight:700,
-                                color: team === "Free Agent" ? "#555" : tc.accent,
-                                padding:"2px 4px", borderRadius:2, minWidth:54,
-                                cursor: editable ? "pointer" : "default",
-                                border:"1px solid transparent", transition:"border-color 0.1s",
-                              }}
+                              style={{ display:"inline-block", fontSize:11, fontWeight:700, color: team==="Free Agent" ? "#555" : tc.accent, padding:"2px 4px", borderRadius:2, minWidth:54, cursor: editable ? "pointer" : "default", border:"1px solid transparent", transition:"border-color 0.1s" }}
                               onMouseEnter={e => { if (editable) e.currentTarget.style.borderColor="#2A2A3A"; }}
                               onMouseLeave={e => { if (editable) e.currentTarget.style.borderColor="transparent"; }}
                             >
@@ -425,17 +576,17 @@ export default function FantasyF1App() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   const tt      = teamTotals();
-  const sorted  = TEAMS.slice().sort((a,b) => tt[b]-tt[a]);
+  const sorted  = TEAMS.slice().sort((a, b) => tt[b] - tt[a]);
   const rbr     = raceByRace();
   const cr      = currentOwnership();
   const dts     = driverTeamScores();
   const vRounds = visibleRounds();
 
   const navTabs = [
-    { key:"standings",   label:"Standings" },
+    { key:"standings",   label:"Standings"     },
     { key:"drivers",     label:"Driver Points" },
-    { key:"history",     label:"Race History" },
-    { key:"lineups",     label:"Lineups" },
+    { key:"history",     label:"Race History"  },
+    { key:"lineups",     label:"Lineups"       },
     ...(isAdmin && !cfg.readOnly ? [{ key:"admin-lineup", label:"⬡ Edit Lineup" }] : []),
   ];
 
@@ -452,9 +603,6 @@ export default function FantasyF1App() {
         .tab-btn:hover:not(.active){color:#DDD}
         .card{background:#13131A;border:1px solid #222;border-radius:4px;overflow:hidden;margin-bottom:16px}
         .card-header{padding:13px 20px;border-bottom:1px solid #222;display:flex;align-items:center;justify-content:space-between}
-        .driver-row{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid #1A1A24;font-size:14px}
-        .driver-row:last-child{border-bottom:none}
-        .driver-row:hover{background:#1A1A26}
         .pts-badge{font-family:'Orbitron',sans-serif;font-size:13px;font-weight:700}
         .refresh-btn{background:#E8003D;color:white;border:none;font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:2px;font-size:12px;cursor:pointer;padding:8px 18px;border-radius:3px;text-transform:uppercase}
         .refresh-btn:hover{background:#ff1a52}
@@ -472,6 +620,8 @@ export default function FantasyF1App() {
         .badge-dns{font-size:10px;letter-spacing:1px;background:#1A1A00;color:#FFCC00;padding:1px 6px;border-radius:2px;border:1px solid #FFCC0033;font-weight:700}
         .badge-nc{font-size:10px;letter-spacing:1px;background:#1A1A2A;color:#FF9955;padding:1px 6px;border-radius:2px;border:1px solid #FF884433;font-weight:700}
         .badge-former{font-size:10px;background:#1A1A1A;color:#888;padding:1px 6px;border-radius:2px;letter-spacing:1px;border:1px solid #333}
+        .badge-sprint-only{font-size:10px;letter-spacing:1px;background:#1A1400;color:#FFD700;padding:1px 8px;border-radius:2px;border:1px solid #FFD70044;font-weight:700}
+        .badge-source{font-size:10px;letter-spacing:1px;background:#0A1A0A;color:#44AA44;padding:1px 8px;border-radius:2px;border:1px solid #44AA4433;font-weight:700}
         .ticker{background:#E8003D;padding:5px 0;font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;white-space:nowrap;overflow:hidden}
         .ticker-inner{display:inline-block;animation:ticker 30s linear infinite}
         @keyframes ticker{0%{transform:translateX(100vw)}100%{transform:translateX(-100%)}}
@@ -489,6 +639,7 @@ export default function FantasyF1App() {
         .form-label{font-size:11px;letter-spacing:2px;color:#999;text-transform:uppercase;display:block;margin-bottom:6px}
         .admin-warning{background:#1A1000;border:1px solid #E8003D33;border-radius:4px;padding:10px 16px;font-size:12px;color:#FF8800;letter-spacing:1px;margin-bottom:16px}
         .history-row-selected td{background:#1E1A10 !important}
+        .history-row-sprint td{background:#13120A !important}
         .detail-flash{animation:flash 0.7s ease-out}
         @keyframes flash{0%{box-shadow:0 0 0 3px #E8003D88}100%{box-shadow:none}}
         .tab-subheading{font-size:13px;letter-spacing:2px;color:#CCC;text-transform:uppercase;font-weight:700;margin-bottom:16px}
@@ -512,7 +663,9 @@ export default function FantasyF1App() {
                 <option value={2025}>2025 — Archive</option>
               </select>
             </div>
-            <button className="refresh-btn" onClick={loadData} disabled={loading}>{loading ? "LOADING..." : "↻ REFRESH"}</button>
+            <button className="refresh-btn" onClick={loadData} disabled={loading}>
+              {loading ? "LOADING..." : "↻ REFRESH"}
+            </button>
             {!cfg.readOnly && (isAdmin
               ? <button className="action-btn" style={{ color:"#E8003D", borderColor:"#E8003D55" }} onClick={() => { setIsAdmin(false); setTab("standings"); }}>⬡ ADMIN ON</button>
               : <button className="action-btn" onClick={() => setShowLogin(true)}>ADMIN</button>
@@ -541,29 +694,38 @@ export default function FantasyF1App() {
       {/* ── BODY ── */}
       <div style={{ maxWidth:1200, margin:"0 auto", padding:"24px 20px" }}>
 
-        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:20 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:20, flexWrap:"wrap" }}>
           <span style={{ fontFamily:"'Orbitron',sans-serif", fontSize:12, fontWeight:700, letterSpacing:2, color: season===2025 ? "#FFD700" : "#E8003D" }}>
             {season} SEASON
           </span>
           {cfg.readOnly && <span style={{ fontSize:13, fontWeight:600, color:"#CCC" }}>· ARCHIVE</span>}
           <span style={{ fontSize:13, fontWeight:600, color:"#CCC" }}>· {Object.keys(results).length} races complete</span>
+          <span className="badge-source">● GOOGLE SHEET</span>
         </div>
 
         {loading && (
           <div style={{ textAlign:"center", padding:"80px 20px" }}>
             <div style={{ fontFamily:"'Orbitron',sans-serif", fontSize:13, letterSpacing:3, color:"#E8003D" }} className="loading-pulse">
-              {loadingRace ? `LOADING ${loadingRace.toUpperCase()}...` : "CONNECTING TO F1 DATA..."}
+              {loadingMsg ? loadingMsg.toUpperCase() : "CONNECTING TO DATA..."}
             </div>
           </div>
         )}
-        {error && <div style={{ background:"#1A0A0A", border:"1px solid #FF444433", borderRadius:4, padding:16, color:"#FF6666", marginBottom:20, fontSize:13 }}>⚠ {error}</div>}
+
+        {error && (
+          <div style={{ background:"#1A0A0A", border:"1px solid #FF444433", borderRadius:4, padding:16, color:"#FF6666", marginBottom:20, fontSize:13 }}>
+            ⚠ {error}
+            <div style={{ marginTop:8, fontSize:12, color:"#FF9999" }}>
+              Check that the Google Sheet is published and accessible, then click Refresh.
+            </div>
+          </div>
+        )}
 
         {!loading && <>
 
           {/* ══ STANDINGS ══ */}
           {tab === "standings" && <>
             {sorted.map((team, i) => {
-              const c = TEAM_COLORS[team];
+              const c             = TEAM_COLORS[team];
               const activeDrivers = Object.entries(cr).filter(([,t]) => t === team).map(([d]) => d);
               const formerDrivers = Object.keys(dts[team] || {}).filter(d => !activeDrivers.includes(d));
               return (
@@ -621,7 +783,9 @@ export default function FantasyF1App() {
                   <div style={{ padding:"16px 24px" }}>
                     <div style={{ fontSize:10, letterSpacing:3, color:"#E8003D", marginBottom:4 }}>NEXT RACE</div>
                     <div style={{ fontFamily:"'Orbitron',sans-serif", fontSize:16, fontWeight:700 }}>{next.raceName}</div>
-                    <div style={{ fontSize:13, color:"#AAA", marginTop:4 }}>{next.Circuit.circuitName} · {new Date(next.date).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</div>
+                    <div style={{ fontSize:13, color:"#AAA", marginTop:4 }}>
+                      {next.Circuit.circuitName} · {new Date(next.date).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
+                    </div>
                   </div>
                 </div>
               );
@@ -633,7 +797,7 @@ export default function FantasyF1App() {
             <div className="tab-subheading">Points credited to team owning driver at time of each race</div>
             {rbr.length === 0 && <div style={{ color:"#AAA", fontSize:14 }}>No completed races yet.</div>}
             {TEAMS.map(team => {
-              const c = TEAM_COLORS[team];
+              const c           = TEAM_COLORS[team];
               const teamDrivers = Object.keys(dts[team] || {});
               if (teamDrivers.length === 0) return null;
               const activeD = teamDrivers.filter(d => cr[d] === team).sort((a,b) => (dts[team][b]?.total||0) - (dts[team][a]?.total||0));
@@ -652,9 +816,12 @@ export default function FantasyF1App() {
                           <th style={{ minWidth:130, position:"sticky", left:0, background:"#13131A", zIndex:2 }}>Driver</th>
                           {rbr.map(r => (
                             <th key={r.round} style={{ minWidth:72, textAlign:"center" }}>
-                              {r.raceName?.replace(" Grand Prix","").replace(" GP","").slice(0,9)}
+                              <div>
+                                {r.raceName?.replace(" Grand Prix","").replace(" GP","").slice(0,9)}
+                                {r.sprintOnly && <span style={{ marginLeft:4, fontSize:9, color:"#FFD700" }}>⚡SP</span>}
+                              </div>
                               <div style={{ fontSize:10, color:"#999", fontWeight:400, marginTop:1 }}>
-                                {new Date(r.date).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                                {r.date ? new Date(r.date).toLocaleDateString("en-US",{month:"short",day:"numeric"}) : `R${r.round}`}
                               </div>
                             </th>
                           ))}
@@ -663,13 +830,13 @@ export default function FantasyF1App() {
                       </thead>
                       <tbody>
                         {allD.map((code, idx) => {
-                          const isCurrent = cr[code] === team;
+                          const isCurrent         = cr[code] === team;
                           const showFormerDivider = idx === activeD.length && formerD.length > 0;
                           return (
                             <>
                               {showFormerDivider && (
                                 <tr key={`div-${team}-former`}>
-                                  <td colSpan={rbr.length + 2} style={{ background:"#0D0D14", padding:"4px 14px", fontSize:10, color:"#666", letterSpacing:2, textTransform:"uppercase", fontWeight:700, borderTop:"1px solid #252530" }}>
+                                  <td colSpan={rbr.length+2} style={{ background:"#0D0D14", padding:"4px 14px", fontSize:10, color:"#666", letterSpacing:2, textTransform:"uppercase", fontWeight:700, borderTop:"1px solid #252530" }}>
                                     ↓ Former drivers
                                   </td>
                                 </tr>
@@ -684,18 +851,20 @@ export default function FantasyF1App() {
                                 </td>
                                 {rbr.map(r => {
                                   const owned   = r.ownership?.[code] === team;
-                                  const racePts = owned ? (r.race[code]?.race ?? 0) : null;
+                                  const racePts = owned ? (r.race[code]?.race    ?? 0) : null;
                                   const spPts   = owned ? (r.sprint[code]?.sprint || 0) : null;
-                                  const total   = racePts !== null ? racePts + spPts : null;
                                   const isDnf   = owned && r.race[code]?.dnf;
                                   return (
-                                    <td key={r.round} style={{ textAlign:"center", padding:"7px 8px" }}>
-                                      {total !== null ? (
+                                    <td key={r.round} style={{ textAlign:"center", padding:"7px 8px", background: r.sprintOnly ? "#13120A" : "transparent" }}>
+                                      {owned ? (
                                         <>
-                                          <span className="pts-badge" style={{ fontSize:13, color: isDnf ? "#FF6666" : total > 0 ? "#E8E8F0" : "#888" }}>
-                                            {total}
-                                          </span>
+                                          {!r.sprintOnly && (
+                                            <span className="pts-badge" style={{ fontSize:13, color: isDnf ? "#FF6666" : (racePts||0) > 0 ? "#E8E8F0" : "#888" }}>
+                                              {racePts}
+                                            </span>
+                                          )}
                                           {spPts > 0 && <div style={{ fontSize:10, color:"#FFD700", marginTop:1 }}>+{spPts} SP</div>}
+                                          {r.sprintOnly && (!spPts || spPts === 0) && <span style={{ color:"#555", fontSize:12 }}>—</span>}
                                         </>
                                       ) : (
                                         <span style={{ color:"#333", fontSize:12 }}>—</span>
@@ -713,11 +882,9 @@ export default function FantasyF1App() {
                           );
                         })}
                         <tr style={{ background:"#0D0D14", borderTop:"2px solid #252530" }}>
-                          <td style={{ position:"sticky", left:0, background:"#0D0D14", fontWeight:800, fontSize:12, color:"#CCC", letterSpacing:1, textTransform:"uppercase", zIndex:1 }}>
-                            Team Total
-                          </td>
+                          <td style={{ position:"sticky", left:0, background:"#0D0D14", fontWeight:800, fontSize:12, color:"#CCC", letterSpacing:1, textTransform:"uppercase", zIndex:1 }}>Team Total</td>
                           {rbr.map(r => (
-                            <td key={r.round} style={{ textAlign:"center" }}>
+                            <td key={r.round} style={{ textAlign:"center", background: r.sprintOnly ? "#13120A" : "transparent" }}>
                               <span className="pts-badge" style={{ color:c.accent, fontSize:14 }}>{r.teamPts[team] || 0}</span>
                             </td>
                           ))}
@@ -755,37 +922,110 @@ export default function FantasyF1App() {
                         <tr
                           key={r.round}
                           style={{ cursor:"pointer" }}
-                          className={selectedRace === r.round ? "history-row-selected" : ""}
+                          className={[
+                            selectedRace === r.round ? "history-row-selected" : "",
+                            r.sprintOnly            ? "history-row-sprint"   : "",
+                          ].join(" ").trim()}
                           onClick={() => setSelectedRace(selectedRace === r.round ? null : r.round)}
                         >
                           <td>
-                            <div style={{ fontWeight:700, display:"flex", alignItems:"center", gap:8 }}>
+                            <div style={{ fontWeight:700, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
                               {r.raceName?.replace(" Grand Prix"," GP")}
-                              {selectedRace === r.round && (
-                                <span style={{ fontSize:10, color:"#E8003D", letterSpacing:1, fontWeight:700 }}>▼ DETAIL</span>
-                              )}
+                              {r.sprintOnly && <span className="badge-sprint-only">⚡ SPRINT ONLY</span>}
+                              {selectedRace === r.round && <span style={{ fontSize:10, color:"#E8003D", letterSpacing:1, fontWeight:700 }}>▼ DETAIL</span>}
                             </div>
                             <div style={{ fontSize:13, fontWeight:600, color:"#CCC" }}>
-                              {new Date(r.date).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                              {r.date ? new Date(r.date).toLocaleDateString("en-US",{month:"short",day:"numeric"}) : `Round ${r.round}`}
+                              {r.sprintOnly && <span style={{ marginLeft:8, fontSize:11, color:"#888" }}>GP pending</span>}
                             </div>
                           </td>
-                          {TEAMS.map(t => <td key={t} className="pts-badge" style={{ color:TEAM_COLORS[t].accent }}>{r.teamPts[t]||0}</td>)}
+                          {TEAMS.map(t => (
+                            <td key={t} className="pts-badge" style={{ color:TEAM_COLORS[t].accent }}>
+                              {r.teamPts[t] || 0}
+                            </td>
+                          ))}
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr style={{ background:"#0D0D14" }}>
                         <td style={{ fontWeight:700, fontSize:12, color:"#CCC" }}>TOTAL</td>
-                        {TEAMS.map(t => <td key={t} className="pts-badge" style={{ color:TEAM_COLORS[t].accent, fontSize:16 }}>{tt[t]}</td>)}
+                        {TEAMS.map(t => (
+                          <td key={t} className="pts-badge" style={{ color:TEAM_COLORS[t].accent, fontSize:16 }}>{tt[t]}</td>
+                        ))}
                       </tr>
                     </tfoot>
                   </table>
                 </div>
               </div>
             )}
+
+            {/* ── Detail panel ── */}
             {selectedRace && results[selectedRace] && (() => {
-              const r = results[selectedRace];
+              const r           = results[selectedRace];
               const { ownership } = rbr.find(x => x.round === selectedRace) || {};
+
+              // ── Sprint-only detail ────────────────────────────────────
+              if (r.sprintOnly) {
+                const sprintEntries = (r.sprintRows || []).map(row => ({
+                  code:      (row.driver_code || "").trim().toUpperCase(),
+                  position:  (row.position    || "").trim(),
+                  sprintPts: r.sprint[(row.driver_code || "").trim().toUpperCase()]?.sprint || 0,
+                }));
+                return (
+                  <div ref={detailRef} className="card detail-flash">
+                    <div className="card-header">
+                      <span style={{ fontFamily:"'Orbitron',sans-serif", fontSize:14, fontWeight:700 }}>
+                        {r.raceName} — Sprint Results
+                        <span className="badge-sprint-only" style={{ marginLeft:10 }}>⚡ SPRINT ONLY · GP PENDING</span>
+                      </span>
+                      <button className="action-btn" onClick={() => setSelectedRace(null)}>✕ Close</button>
+                    </div>
+                    <div style={{ padding:"10px 20px 6px", fontSize:12, color:"#888", letterSpacing:1 }}>
+                      Main GP has not yet been entered. Sprint points are included in team totals.
+                    </div>
+                    <div style={{ overflowX:"auto" }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th style={{ width:60 }}>Pos</th>
+                            <th>Driver</th>
+                            <th>Fantasy Team</th>
+                            <th style={{ textAlign:"center", color:"#FFD700" }}>Sprint Pts</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sprintEntries.map(({ code, position, sprintPts }) => {
+                            const ft = ownership?.[code];
+                            return (
+                              <tr key={code}>
+                                <td style={{ color:"#AAA", fontSize:13 }}>{position}</td>
+                                <td>
+                                  <span style={{ fontWeight:700, fontSize:14 }}>{code}</span>{" "}
+                                  <span style={{ fontSize:12, color:"#CCC", fontWeight:600 }}>{F1_DRIVER_MAP[code]}</span>
+                                </td>
+                                <td>
+                                  {ft
+                                    ? <span style={{ fontSize:13, fontWeight:700, background:TEAM_COLORS[ft]?.accent+"22", color:TEAM_COLORS[ft]?.accent, padding:"3px 10px", borderRadius:2 }}>{ft}</span>
+                                    : <span style={{ color:"#888", fontSize:13, fontWeight:600 }}>Free Agent</span>
+                                  }
+                                </td>
+                                <td style={{ textAlign:"center" }}>
+                                  <span className="pts-badge" style={{ color: sprintPts > 0 ? "#FFD700" : "#666", fontSize:14 }}>
+                                    {sprintPts || "—"}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              }
+
+              // ── Full weekend detail ───────────────────────────────────
               return (
                 <div ref={detailRef} className="card detail-flash">
                   <div className="card-header">
@@ -798,45 +1038,24 @@ export default function FantasyF1App() {
                     <table>
                       <thead>
                         <tr>
-                          <th>Pos</th>
+                          <th style={{ width:60 }}>Pos</th>
                           <th>Driver</th>
                           <th>Fantasy Team</th>
                           <th>Status</th>
-                          <th>Race Pts</th>
-                          <th>Sprint Pts</th>
-                          <th>Total</th>
+                          <th style={{ textAlign:"center" }}>Race Pts</th>
+                          <th style={{ textAlign:"center" }}>Sprint Pts</th>
+                          <th style={{ textAlign:"center" }}>Total</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {(r.rawRace?.Results||[]).map(row => {
-                          const code  = row.Driver.code;
-                          const ft    = ownership?.[code];
-                          const rP    = r.race[code]?.race ?? 0;
-                          const sP    = r.sprint[code]?.sprint ?? 0;
-                          const dnf   = r.race[code]?.dnf;
-                          const label = r.race[code]?.dnfLabel;
-                          const laps  = r.race[code]?.lapsCompleted;
-                          const isNC  = r.race[code]?.isNC;
-
-                          // Build status cell: show NC badge AND reason badge when both apply
-                          const statusCell = dnf ? (
-                            <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:3 }}>
-                              {isNC && label !== "NC" && <span className="badge-nc">NC</span>}
-                              {label === "DSQ" && <span className="badge-dsq">DSQ</span>}
-                              {label === "DNS" && <span className="badge-dns">DNS</span>}
-                              {label === "DNF" && <span className="badge-dnf">DNF</span>}
-                              {label === "NC"  && <span className="badge-nc">NC</span>}
-                              <span style={{ fontSize:12, color:"#AAA", fontWeight:600, marginLeft:2 }}>
-                                {laps === 0 ? "0 laps" : laps != null ? `${laps} laps` : ""}
-                              </span>
-                            </div>
-                          ) : (
-                            <span style={{ color:"#4CAF50", fontSize:13, fontWeight:700 }}>✓ Finished</span>
-                          );
-
+                        {(r.driverList || []).map(({ code, positionDisplay, lapsCompleted, dnfLabel }) => {
+                          const ft  = ownership?.[code];
+                          const rP  = r.race[code]?.race     ?? 0;
+                          const sP  = r.sprint[code]?.sprint  ?? 0;
+                          const dnf = r.race[code]?.dnf;
                           return (
                             <tr key={code}>
-                              <td style={{ color:"#AAA", fontSize:13 }}>{row.position}</td>
+                              <td style={{ color:"#AAA", fontSize:13 }}>{positionDisplay}</td>
                               <td>
                                 <span style={{ fontWeight:700, fontSize:14 }}>{code}</span>{" "}
                                 <span style={{ fontSize:12, color:"#CCC", fontWeight:600 }}>{F1_DRIVER_MAP[code]}</span>
@@ -847,10 +1066,10 @@ export default function FantasyF1App() {
                                   : <span style={{ color:"#888", fontSize:13, fontWeight:600 }}>Free Agent</span>
                                 }
                               </td>
-                              <td>{statusCell}</td>
-                              <td className="pts-badge" style={{ color: dnf ? "#FF5555" : "#E8E8F0" }}>{rP}</td>
-                              <td className="pts-badge" style={{ color: sP > 0 ? "#FFD700" : "#888" }}>{sP||"—"}</td>
-                              <td className="pts-badge" style={{ color: rP+sP > 0 ? "#E8003D" : "#999" }}>{rP+sP}</td>
+                              <td><StatusBadge dnfLabel={dnfLabel} lapsCompleted={lapsCompleted} /></td>
+                              <td className="pts-badge" style={{ textAlign:"center", color: dnf ? "#FF5555" : "#E8E8F0" }}>{rP}</td>
+                              <td className="pts-badge" style={{ textAlign:"center", color: sP > 0 ? "#FFD700" : "#888" }}>{sP || "—"}</td>
+                              <td className="pts-badge" style={{ textAlign:"center", color: rP+sP > 0 ? "#E8003D" : "#999" }}>{rP+sP}</td>
                             </tr>
                           );
                         })}
@@ -907,7 +1126,8 @@ export default function FantasyF1App() {
             <div style={{ fontFamily:"'Orbitron',sans-serif", fontSize:16, color:"#E8003D", marginBottom:20 }}>Admin Access</div>
             <label className="form-label">Password</label>
             <input type="password" value={pwInput} onChange={e => setPwInput(e.target.value)}
-              onKeyDown={e => e.key==="Enter" && handleLogin()} placeholder="Enter admin password" autoFocus style={{ marginBottom:12 }} />
+              onKeyDown={e => e.key==="Enter" && handleLogin()}
+              placeholder="Enter admin password" autoFocus style={{ marginBottom:12 }} />
             {pwError && <div style={{ color:"#FF4444", fontSize:13, marginBottom:12 }}>✕ Incorrect password</div>}
             <div style={{ display:"flex", gap:10, marginTop:4 }}>
               <button className="save-btn" onClick={handleLogin}>LOGIN</button>
