@@ -137,22 +137,7 @@ function parseCSV(text) {
   });
 }
 
-// ── REAL RESULT DETECTOR ──────────────────────────────────────────────────────
-//
-// Returns true only if the row contains actual race/sprint results, as opposed
-// to a placeholder row for a future race that hasn't happened yet.
-// A row is "real" if it has either:
-//   • a numeric finishing position (e.g. "1", "12")
-//   • a recognised non-finish status code (NC, DQ, DNF, DNS, DSQ)
 
-function isRealResult(row) {
-  const pos = (row.position || "").trim();
-  const tr  = (row["time_retired"] || row["time/retired"] || "").trim();
-  // Placeholder rows have all empty cells. Any non-empty value in either
-  // position or time/retired means real data was entered — finishers,
-  // lapped cars, DNFs, DSQs, etc. are all covered.
-  return pos !== "" || tr !== "";
-}
 
 // ── SHEET ROW CLASSIFIER ──────────────────────────────────────────────────────
 //
@@ -269,9 +254,10 @@ async function fetchSheetData() {
     if (!grouped[season])        grouped[season] = {};
     if (!grouped[season][round]) grouped[season][round] = { race: [], sprint: [] };
 
-    // ── KEY FIX: only include rows with actual results, not placeholders ──
-    if (session === "race"   && isRealResult(row)) grouped[season][round].race.push(row);
-    if (session === "sprint" && isRealResult(row)) grouped[season][round].sprint.push(row);
+    // Skip placeholder rows — they have no driver_code
+    if (!(row.driver_code || "").trim()) continue;
+    if (session === "race")   grouped[season][round].race.push(row);
+    if (session === "sprint") grouped[season][round].sprint.push(row);
   }
   return grouped;
 }
