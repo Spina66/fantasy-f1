@@ -8,13 +8,25 @@ const ADMIN_PASSWORD = "f1spina";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ── GOOGLE SHEET CONFIG ───────────────────────────────────────────────────────
-// Live CSV export via the gviz/tq endpoint — reads directly from the sheet,
-// not from Google's "Publish to web" CDN cache, so it won't lag/flip between
-// old and new snapshots the way /pub?output=csv could.
-// Sheet must be shared as "Anyone with the link can view."
-// Update SPREADSHEET_ID / gid below if the sheet URL or tab ever changes.
+// Published CSV URL for the "Results" tab — update if the sheet URL ever changes
+//
+// NOTE: we use the "Publish to web" (/pub?output=csv) link rather than the
+// gviz/tq endpoint, because gviz/tq does not send CORS headers that allow
+// cross-origin browser fetch() calls to read the response — it works fine
+// from server-side tools (curl, pandas) but silently fails when called from
+// a browser-based app like this one, and Publish-to-web links are built to
+// support exactly this the case.
+//
+// KNOWN CAVEAT: Publish-to-web links are served through Google's own CDN
+// cache, which refreshes across edge nodes asynchronously after edits, so
+// results can occasionally lag by a few minutes right after you update the
+// sheet. fetchSheetData() below adds cache-busting + no-store to eliminate
+// *browser*-side caching, which should remove most of the flip-flopping.
+// If stale/flip-flopping data still shows up after this, the next step would
+// be a small Google Apps Script "web app" proxy that reads the sheet live and
+// serves it with proper CORS headers — ask me to set that up if needed.
 const SHEET_CSV_URL =
-  "https://docs.google.com/spreadsheets/d/1rjroTF8Q42Mm4zuLB7QR5tC8HFbaa_WU_LgWO9bX_LI/gviz/tq?tqx=out:csv&gid=1316044119";
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vS09py3RUvDHefcT4J5ZVCjW5UVi-qsSA5Nyo6pJ8pKM2gqn6bTJd5RU3UKNNhTnTNcm517OBXIsjx9/pub?gid=1316044119&single=true&output=csv";
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 const F1_DRIVER_MAP = {
@@ -244,9 +256,8 @@ function scoreSprintFromSheet(rows) {
 // One fetch, all seasons:  sheetData[season][round] = { race: rows[], sprint: rows[] }
 
 async function fetchSheetData() {
-  // cache-busting param + no-store: belt-and-suspenders so the browser
-  // never serves a cached copy of the CSV, on top of the gviz endpoint
-  // itself already reading live from the sheet.
+  // cache-busting param + no-store: forces a genuinely fresh network request
+  // instead of letting the browser return a stale cached CSV response.
   const bustedUrl = `${SHEET_CSV_URL}&_ts=${Date.now()}`;
   const res = await fetch(bustedUrl, { cache: "no-store" });
   if (!res.ok) throw new Error(`Sheet fetch failed: HTTP ${res.status}`);
