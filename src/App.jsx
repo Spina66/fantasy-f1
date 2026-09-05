@@ -8,9 +8,13 @@ const ADMIN_PASSWORD = "f1spina";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ── GOOGLE SHEET CONFIG ───────────────────────────────────────────────────────
-// Published CSV URL for the "Results" tab — update if the sheet URL ever changes
+// Live CSV export via the gviz/tq endpoint — reads directly from the sheet,
+// not from Google's "Publish to web" CDN cache, so it won't lag/flip between
+// old and new snapshots the way /pub?output=csv could.
+// Sheet must be shared as "Anyone with the link can view."
+// Update SPREADSHEET_ID / gid below if the sheet URL or tab ever changes.
 const SHEET_CSV_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vS09py3RUvDHefcT4J5ZVCjW5UVi-qsSA5Nyo6pJ8pKM2gqn6bTJd5RU3UKNNhTnTNcm517OBXIsjx9/pub?gid=1316044119&single=true&output=csv";
+  "https://docs.google.com/spreadsheets/d/1rjroTF8Q42Mm4zuLB7QR5tC8HFbaa_WU_LgWO9bX_LI/gviz/tq?tqx=out:csv&gid=1316044119";
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 const F1_DRIVER_MAP = {
@@ -240,7 +244,11 @@ function scoreSprintFromSheet(rows) {
 // One fetch, all seasons:  sheetData[season][round] = { race: rows[], sprint: rows[] }
 
 async function fetchSheetData() {
-  const res = await fetch(SHEET_CSV_URL);
+  // cache-busting param + no-store: belt-and-suspenders so the browser
+  // never serves a cached copy of the CSV, on top of the gviz endpoint
+  // itself already reading live from the sheet.
+  const bustedUrl = `${SHEET_CSV_URL}&_ts=${Date.now()}`;
+  const res = await fetch(bustedUrl, { cache: "no-store" });
   if (!res.ok) throw new Error(`Sheet fetch failed: HTTP ${res.status}`);
   const text    = await res.text();
   const rows    = parseCSV(text);
@@ -396,6 +404,15 @@ export default function FantasyF1App() {
 
   useEffect(() => { loadData(); },   [loadData]);
   useEffect(() => { loadLineup(); }, [loadLineup]);
+
+  // ── Supabase keepalive: ping every 3 days to prevent project auto-pausing ──
+  useEffect(() => {
+    const ping = () => supabase.from("lineup_2026").select("driver").limit(1);
+    ping();
+    const interval = setInterval(ping, 1000 * 60 * 60 * 24 * 3);
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     if (editCell && editRef.current) editRef.current.focus();
   }, [editCell]);
